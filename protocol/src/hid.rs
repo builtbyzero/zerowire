@@ -13,9 +13,74 @@
 //! earlier `BIND_ACK`. `seq` is a per-binding sender-side sequence number
 //! used to detect drops and (optionally) smooth pointer jitter on RTT spikes.
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub const HID_HEADER_LEN: usize = 4;
+
+/// Coarse classification of an exposed HID device. The sender fills this in
+/// on the `BindAck` JSON sidecar so the receiver can pick the right uinput
+/// device layout without having to parse the full HID report descriptor.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceKind {
+    Mouse,
+    Keyboard,
+    Gamepad,
+    Other,
+}
+
+/// JSON payload the receiver sends as the body of a `HidOp::Bind` frame.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BindRequest {
+    pub busid: String,
+    /// `"input"` for now (we don't yet do feature/output binds).
+    pub want: String,
+}
+
+/// JSON payload the sender prepends to the report descriptor in a
+/// `HidOp::BindAck` frame. Layout on the wire:
+///
+/// ```text
+/// bind_ack body = [ u16 BE: meta_len ] [ meta_len bytes: BindAckMeta JSON ] [ report descriptor bytes ]
+/// ```
+///
+/// This is a non-breaking extension of v1: the existing tests treat the
+/// whole body as opaque report descriptor bytes, and any receiver that
+/// doesn't know about the meta-prefix can keep doing that, since we use
+/// `parse_bind_ack` for the structured view.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BindAckMeta {
+    pub busid: String,
+    pub kind: DeviceKind,
+    pub vendor_id: u16,
+    pub product_id: u16,
+    pub name: String,
+}
+
+/// Build a `BindAck` body with the meta sidecar in front of the report descriptor.
+pub fn encode_bind_ack_body(meta: &BindAckMeta, report_descriptor: &[u8]) -> Vec<u8> {
+    let meta_json = serde_json::to_vec(meta).expect("BindAckMeta serializes");
+    let mut out = Vec::with_capacity(2 + meta_json.len() + report_descriptor.len());
+    out.extend_from_slice(&(meta_json.len() as u16).to_be_bytes());
+    out.extend_from_slice(&meta_json);
+    out.extend_from_slice(report_descriptor);
+    out
+}
+
+/// Split a `BindAck` body back into (meta, report descriptor).
+pub fn parse_bind_ack_body(body: &[u8]) -> Result<(BindAckMeta, &[u8]), HidError> {
+    if body.len() < 2 {
+        return Err(HidError::Short(body.len()));
+    }
+    let meta_len = u16::from_be_bytes([body[0], body[1]]) as usize;
+    if body.len() < 2 + meta_len {
+        return Err(HidError::Short(body.len()));
+    }
+    let meta: BindAckMeta = serde_json::from_slice(&body[2..2 + meta_len])
+        .map_err(|_| HidError::BadMeta)?;
+    Ok((meta, &body[2 + meta_len..]))
+}
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -57,6 +122,8 @@ pub enum HidError {
     Short(usize),
     #[error("unknown hid op: 0x{0:02x}")]
     UnknownOp(u8),
+    #[error("bind_ack meta is not valid JSON")]
+    BadMeta,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -141,5 +208,60 @@ mod tests {
     fn rejects_short() {
         let bytes = [0x10, 0x00];
         assert!(matches!(HidFrame::parse(&bytes), Err(HidError::Short(2))));
+    }
+
+    #[test]
+    fn bind_ack_body_round_trip() {
+        let meta = BindAckMeta {
+            busid: "1-2".into(),
+            kind: DeviceKind::Mouse,
+            vendor_id: 0x046d,
+            product_id: 0xc52b,
+            name: "Logitech Unifying Mouse".into(),
+        };
+        let rd: &[u8] = &[0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0xC0];
+        let body = encode_bind_ack_body(&meta, rd);
+        let (got_meta, got_rd) = parse_bind_ack_body(&body).unwrap();
+        assert_eq!(got_meta, meta);
+        assert_eq!(got_rd, rd);
+    }
+
+    #[test]
+    fn bind_request_json_round_trip() {
+        let req = BindRequest { busid: "1-2".into(), want: "input".into() };
+        let json = serde_json::to_vec(&req).unwrap();
+        let back: BindRequest = serde_json::from_slice(&json).unwrap();
+        assert_eq!(req, back);
+    }
+
+    #[test]
+    fn full_bind_ack_frame_round_trip() {
+        let meta = BindAckMeta {
+            busid: "1-2".into(),
+            kind: DeviceKind::Keyboard,
+            vendor_id: 0x05ac,
+            product_id: 0x024f,
+            name: "Apple Magic Keyboard".into(),
+        };
+        let rd: &[u8] = &[0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0xC0];
+        let body = encode_bind_ack_body(&meta, rd);
+        let frame = HidFrame::new(HidOp::BindAck, 3, 0, &body);
+        let bytes = frame.encode();
+        let parsed = HidFrame::parse(&bytes).unwrap();
+        assert_eq!(parsed.op, HidOp::BindAck);
+        assert_eq!(parsed.bind_id, 3);
+        let (got_meta, got_rd) = parse_bind_ack_body(parsed.body).unwrap();
+        assert_eq!(got_meta, meta);
+        assert_eq!(got_rd, rd);
+    }
+
+    #[test]
+    fn parse_bind_ack_rejects_garbage() {
+        // claims meta_len = 5 but only 2 bytes follow
+        let bad: [u8; 4] = [0x00, 0x05, b'{', b'}'];
+        assert_eq!(parse_bind_ack_body(&bad), Err(HidError::Short(4)));
+        // valid length but body is not JSON
+        let bad2: Vec<u8> = vec![0x00, 0x03, b'n', b'o', b'!'];
+        assert_eq!(parse_bind_ack_body(&bad2), Err(HidError::BadMeta));
     }
 }

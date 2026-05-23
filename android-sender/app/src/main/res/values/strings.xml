@@ -6,4 +6,7 @@
     <string name="status_advertising">Advertising on the LAN.</string>
     <string name="pairing_code_label">Pairing code</string>
     <string name="no_devices">No USB devices plugged in.</string>
+    <string name="connect_hint">From your computer, run:</string>
+    <string name="connect_command">zerowire-cli receive --sender "%1$s"</string>
+    <string name="v01_note">v0.1: pairing code is informational only — the session handshake is plaintext on this LAN. TLS + PSK proof land in v0.2.</string>
 </resources>

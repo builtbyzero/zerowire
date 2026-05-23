@@ -20,3 +20,7 @@ pub mod control;
 pub mod discovery;
 
 pub use envelope::{Channel, Envelope, EnvelopeError, MAGIC, PROTOCOL_VERSION};
+pub use hid::{
+    encode_bind_ack_body, parse_bind_ack_body, BindAckMeta, BindRequest, DeviceKind, HidError,
+    HidFrame, HidOp, HID_HEADER_LEN,
+};

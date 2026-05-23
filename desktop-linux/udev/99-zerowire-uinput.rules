@@ -1,0 +1,19 @@
+# /etc/udev/rules.d/99-zerowire-uinput.rules
+#
+# Lets users in the `uinput` group open /dev/uinput without sudo, so the
+# zerowire Linux receiver can create virtual mouse/keyboard devices.
+#
+# Install:
+#     sudo groupadd -f uinput
+#     sudo usermod -aG uinput "$USER"
+#     sudo install -m 0644 desktop-linux/udev/99-zerowire-uinput.rules \
+#         /etc/udev/rules.d/99-zerowire-uinput.rules
+#     sudo udevadm control --reload-rules
+#     sudo udevadm trigger
+#     # log out and back in so the new group membership takes effect
+#
+# Also make sure the kernel module is loaded:
+#     sudo modprobe uinput
+#     echo uinput | sudo tee /etc/modules-load.d/zerowire.conf
+
+KERNEL=="uinput", GROUP="uinput", MODE="0660", OPTIONS+="static_node=uinput"

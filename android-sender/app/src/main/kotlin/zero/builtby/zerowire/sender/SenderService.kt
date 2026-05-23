@@ -12,17 +12,17 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import java.net.ServerSocket
+import java.net.Socket
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.concurrent.thread
 
 /**
- * Foreground service responsible for, eventually:
- *   * Owning the TCP/TLS listening socket.
+ * Foreground service responsible for:
+ *   * Owning the TCP listening socket (TLS arrives in v0.2).
  *   * Advertising `_zerowire._tcp.local.` via mDNS.
- *   * Tracking active receiver sessions.
- *
- * Today it does mDNS advertisement + binds a listening socket on the
- * zerowire default port (47823), and ignores anyone who connects. The
- * actual session loop is not implemented yet — that's the next milestone.
+ *   * Spawning a [ReceiverSession] per incoming connection.
+ *   * Tracking active sessions so we can tear them down cleanly on stop.
  */
 class SenderService : Service() {
 
@@ -38,6 +38,8 @@ class SenderService : Service() {
     private var regListener: NsdManager.RegistrationListener? = null
     private var serverSocket: ServerSocket? = null
     private val senderId: String = UUID.randomUUID().toString()
+    private val sessions = CopyOnWriteArrayList<ReceiverSession>()
+    @Volatile private var acceptLoopAlive = true
 
     override fun onCreate() {
         super.onCreate()
@@ -52,10 +54,13 @@ class SenderService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        acceptLoopAlive = false
         regListener?.let { l ->
             try { nsd?.unregisterService(l) } catch (_: Throwable) { /* ignore */ }
         }
         try { serverSocket?.close() } catch (_: Throwable) { /* ignore */ }
+        sessions.forEach { runCatching { it.stop() } }
+        sessions.clear()
     }
 
     private fun startListenerAndAdvertise() {
@@ -94,8 +99,31 @@ class SenderService : Service() {
             regListener = listener
             mgr.registerService(info, NsdManager.PROTOCOL_DNS_SD, listener)
         }
-        // TODO(v0.1): accept() loop on serverSocket, hand each Socket to a
-        // SessionHandler that runs the zerowire HELLO → AUTH → device list flow.
+        startAcceptLoop(socket)
+    }
+
+    private fun startAcceptLoop(server: ServerSocket) {
+        thread(start = true, isDaemon = true, name = "zerowire-accept") {
+            Log.i(TAG, "accept loop running on port ${server.localPort}")
+            while (acceptLoopAlive && !server.isClosed) {
+                val client: Socket = try {
+                    server.accept()
+                } catch (e: Throwable) {
+                    if (acceptLoopAlive) Log.w(TAG, "accept failed: ${e.message}")
+                    break
+                }
+                val session = ReceiverSession(
+                    socket = client,
+                    ctx = applicationContext,
+                    senderId = senderId,
+                    deviceName = Build.MODEL ?: "Android",
+                )
+                sessions.add(session)
+                thread(start = true, isDaemon = true, name = "zerowire-session") {
+                    try { session.run() } finally { sessions.remove(session) }
+                }
+            }
+        }
     }
 
     private fun buildNotification(state: String): Notification {

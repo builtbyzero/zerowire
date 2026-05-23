@@ -58,6 +58,8 @@ Carthage/Build/
 x64/
 x86/
 [Bb]in/
+!desktop-linux/src/bin/
+!desktop-linux/src/bin/**
 [Oo]bj/
 *.suo
 *.user

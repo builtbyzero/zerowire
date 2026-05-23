@@ -4,7 +4,7 @@
 
 builtbyzero · MIT-spirited / Apache-2.0 licensed.
 
-> **Status: v0 walking skeletons.** This repo currently contains the architecture, protocol skeleton, and the bare bones of an Android sender and a Linux receiver CLI. There is **no actual USB passthrough yet** — only discovery, handshake, and device-listing plumbing. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the target system.
+> **Status: v0.1 HID fast-lane is wired end-to-end on Linux.** Mock-sender ⇄ Linux receiver loopback works (see [`docs/hid-demo.md`](./docs/hid-demo.md) and [`tests/hid_loopback.sh`](./tests/hid_loopback.sh)). The Android sender still needs hardware verification; see the manual test plan in the demo doc. USB/IP passthrough for non-HID devices is the next milestone. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full target system.
 
 ## What it does (when finished)
 
@@ -59,6 +59,35 @@ cargo build
 ./target/debug/zerowire-cli discover
 ```
 
+### HID demo (Linux receiver + mock sender)
+
+Fastest way to see the wire actually move bytes:
+
+```bash
+cd desktop-linux
+cargo build --bin zerowire-cli --bin zerowire-mock-sender
+
+# Terminal 1: pretend to be the Android sender on loopback.
+./target/debug/zerowire-mock-sender --reports 200 --interval-ms 20
+
+# Terminal 2: real receiver. Needs /dev/uinput access.
+# (`sudo modprobe uinput` once; for unprivileged use install the udev
+# rule in `desktop-linux/udev/`. See that dir's README for the one-shot
+# setup.)
+./target/debug/zerowire-cli receive --target 127.0.0.1:47823
+```
+
+A virtual mouse appears (visible to `libinput list-devices` and to your
+desktop session) and the cursor twitches right ~200 times. Full demo doc:
+[`docs/hid-demo.md`](./docs/hid-demo.md).
+
+No permission to open `/dev/uinput`? Run the integration test, which
+logs report bytes to a file instead:
+
+```bash
+./tests/hid_loopback.sh        # passes locally; ~1s wall time
+```
+
 ### Android sender
 ```bash
 cd android-sender
@@ -67,11 +96,15 @@ cd android-sender
 ```
 
 > Note: requires Android SDK 34, JDK 17, and the Gradle wrapper will fetch itself on first run.
+> **The Android sender code in this checkout is not yet hardware-verified.**
+> Manual test plan: [`docs/hid-demo.md`](./docs/hid-demo.md).
 
 ## Roadmap
 
-- **v0 (now):** architecture, protocol skeleton, walking skeletons that compile.
-- **v0.1 next:** HID fast-lane end-to-end (Android sender → Linux receiver, mouse moves a real cursor).
+- **v0 (done):** architecture, protocol skeleton, walking skeletons that compile.
+- **v0.1 (in progress):** HID fast-lane end-to-end. Linux receiver + mock
+  sender loopback verified. Android sender code shipped, awaiting hardware
+  test.
 - **v0.2:** USB/IP passthrough on Linux receiver against a real USB stick.
 - **v0.3:** Windows receiver with bundled `usbip-win2`.
 - **v0.4:** macOS HID-only receiver.
