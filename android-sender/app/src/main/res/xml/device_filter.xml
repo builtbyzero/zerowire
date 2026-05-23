@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Empty matcher: we want notification for every plugged-in USB device,
+  not just specific vendor/product IDs. Android still requires the file
+  to exist when USB_DEVICE_ATTACHED is referenced from the manifest.
+-->
+<resources>
+    <usb-device />
+</resources>

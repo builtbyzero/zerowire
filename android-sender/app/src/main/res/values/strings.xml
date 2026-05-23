@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">zerowire</string>
+    <string name="tagline">Share any USB device over WiFi.</string>
+    <string name="status_idle">Idle — plug in a USB device to share.</string>
+    <string name="status_advertising">Advertising on the LAN.</string>
+    <string name="pairing_code_label">Pairing code</string>
+    <string name="no_devices">No USB devices plugged in.</string>
+</resources>

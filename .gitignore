@@ -1,0 +1,81 @@
+# ---------------- OS / editor ----------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.iml
+
+# ---------------- Rust ----------------
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# ---------------- Node ----------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+dist/
+build/
+
+# ---------------- Android / Gradle / Kotlin ----------------
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+.gradle/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.hprof
+# Keep wrappers checked in
+!gradle-wrapper.jar
+android-sender/.idea/
+android-sender/local.properties
+android-sender/build/
+android-sender/**/build/
+
+# ---------------- Xcode / iOS / macOS ----------------
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+Pods/
+Carthage/Build/
+
+# ---------------- Windows / Visual Studio ----------------
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+*.pfx
+*.snk
+
+# ---------------- Python (in case of tooling scripts) ----------------
+__pycache__/
+*.pyc
+.venv/
+
+# ---------------- Secrets / local config ----------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/

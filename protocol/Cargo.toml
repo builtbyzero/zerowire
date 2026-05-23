@@ -1,0 +1,17 @@
+[package]
+name = "zerowire-protocol"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Shared wire-protocol definitions for zerowire (USB/IP + HID fast lane)."
+repository = "https://github.com/builtbyzero/zerowire"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+
+[dev-dependencies]
