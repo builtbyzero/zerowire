@@ -6,15 +6,26 @@ kernel driver; we lean on what the kernel already has.
 
 ## Status
 
-Walking skeleton. Currently this crate ships only the **CLI**:
+**v0.1 HID fast lane is live.** This crate ships:
 
 * `zerowire-cli discover` — mDNS browse for `_zerowire._tcp.`.
-* `zerowire-cli connect <host:port>` — TCP connect + zerowire HELLO/HELLO_ACK.
-* `zerowire-cli list <host:port>` — connect, then `LIST_DEVICES`.
+* `zerowire-cli connect <host:port>` — TCP + HELLO/HELLO_ACK.
+* `zerowire-cli list <host:port>` — + `LIST_DEVICES`.
+* `zerowire-cli receive` — full HID fast-lane session: discover, attach,
+  bind, push reports through `/dev/uinput`.
+  * `--target host:port` — skip mDNS, dial directly.
+  * `--sender <name>` — pick by mDNS TXT name.
+  * `--busid <id>` — pick a specific device on the sender.
+  * `--simulate` — fake mouse jitter into a real virtual device. No
+    network. Use to validate `/dev/uinput` permissions.
+  * `--simulate-source <log>` — dial a sender but log report bytes to
+    a file instead of injecting them. Used by `tests/hid_loopback.sh`.
+* `zerowire-mock-sender` — stand-in for the Android sender. Loops back
+  to localhost for integration testing and ad-hoc dev.
 
-No TLS yet. No actual USB passthrough yet. The point is: the wire layer is
-real, the protocol matches what the Android sender will speak, and the daemon
-slot is where the `vhci-hcd` integration will land.
+No TLS yet (plaintext handshake, ARCHITECTURE.md §6.2 is unchanged).
+USB/IP passthrough on channel `0x02` is still placeholder. The HID fast lane
+on channel `0x03` is real and end-to-end.
 
 ## Build & run
 
@@ -23,6 +34,9 @@ cd desktop-linux
 cargo build
 ./target/debug/zerowire-cli discover
 ```
+
+For the HID demo, see [`../docs/hid-demo.md`](../docs/hid-demo.md). For
+the one-time `/dev/uinput` permission setup, see [`udev/README.md`](./udev/README.md).
 
 ## `vhci-hcd` integration plan
 

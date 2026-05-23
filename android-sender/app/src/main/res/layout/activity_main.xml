@@ -46,6 +46,32 @@
         android:text="——————" />
 
     <TextView
+        android:id="@+id/connect_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/connect_hint" />
+
+    <TextView
+        android:id="@+id/connect_command"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="monospace"
+        android:textSize="12sp"
+        tools:ignore="HardcodedText"
+        android:text="zerowire-cli receive --sender ..." />
+
+    <TextView
+        android:id="@+id/v01_note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="11sp"
+        android:textStyle="italic"
+        android:text="@string/v01_note" />
+
+    <TextView
         android:id="@+id/device_list_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

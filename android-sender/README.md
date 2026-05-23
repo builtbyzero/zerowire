@@ -4,18 +4,40 @@ Walking skeleton of the Android app that shares plugged-in USB devices over WiFi
 
 ## What works today
 
-- `MainActivity` lists every currently-plugged USB device with vid/pid and HID-or-not.
+- `MainActivity` lists every currently-plugged USB device with vid/pid and HID-or-not, requests USB permission for them, and shows the `zerowire-cli receive --sender <name>` command-line to run on the laptop.
 - `SenderService` runs as a foreground service:
   - binds a TCP listening socket on port **47823** (the zerowire default),
-  - registers `_zerowire._tcp.` with `NsdManager` and publishes the TXT records that match `protocol::discovery` (`v`, `id`, `n`, `port`, `caps`).
-- `UsbInventory` produces the JSON payload that matches `ControlMessage::DeviceList` in the shared protocol crate.
-- `PairingCodes.sixDigit()` generates a `SecureRandom`-backed 6-digit code, displayed on `MainActivity`.
+  - registers `_zerowire._tcp.` with `NsdManager` and publishes the TXT records that match `protocol::discovery` (`v`, `id`, `n`, `port`, `caps`),
+  - **accepts incoming receivers** and runs each through `ReceiverSession`.
+- `ReceiverSession` walks the full protocol state machine:
+  HELLO → HELLO_ACK, LIST_DEVICES → DEVICE_LIST, ATTACH → ATTACH_OK,
+  HID Bind → BindAck, then streams `HidOp::ReportIn` envelopes for every
+  HID input report read off the device.
+- `HidEndpoint` claims a USB HID interface, fetches the report descriptor
+  via the standard HID class control transfer, and reads input reports
+  off the IN interrupt endpoint.
+- `WireProtocol` is the Kotlin port of `protocol/src/envelope.rs` and
+  `protocol/src/hid.rs` — same bytes, same semantics.
 
-## What's stubbed
+## What's still stubbed in v0.1
 
-- No `accept()` loop yet — the listening socket exists but the session handler isn't wired. Next milestone.
-- No TLS yet (the receiver also doesn't speak TLS yet — both sides plaintext for the v0 handshake).
-- No per-device authorization UI — that's planned (see `ARCHITECTURE.md` §5.3).
+- **Pairing is plaintext.** The 6-digit code displayed in the UI is
+  informational; the receiver does not have to enter it. TLS + PSK proof
+  on the control channel is v0.2 work (ARCHITECTURE.md §6.2).
+- **Per-device authorization UI** is implicit — if Android already granted
+  USB permission, we claim. Otherwise the user gets the system permission
+  prompt at `MainActivity` startup. The ARCHITECTURE.md §5.3 "explicit
+  authorize each receiver-side attach" flow is not yet built.
+- **High-DPI or NKRO devices** stream their reports as-is; the receiver's
+  boot-format decoder may misinterpret them. Sender-side translation to
+  boot format is a follow-up.
+
+## Hardware verification status
+
+The Kotlin code in this checkout was developed without an Android SDK on
+the build host. It compiles cleanly in code review against the AOSP source
+for `UsbDeviceConnection`/`UsbHostManager`, but **has not been run against
+a real phone**. See `docs/hid-demo.md` for the manual test plan.
 
 ## Build prerequisites
 
