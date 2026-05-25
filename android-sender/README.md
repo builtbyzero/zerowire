@@ -37,7 +37,10 @@ Walking skeleton of the Android app that shares plugged-in USB devices over WiFi
 The Kotlin code in this checkout was developed without an Android SDK on
 the build host. It compiles cleanly in code review against the AOSP source
 for `UsbDeviceConnection`/`UsbHostManager`, but **has not been run against
-a real phone**. See `docs/hid-demo.md` for the manual test plan.
+a real phone**. The runbook with stage-by-stage pass/fail criteria,
+diagnostic-log recipes, and a fillable matrix is at
+[`docs/hardware-verify.md`](../docs/hardware-verify.md). The shorter
+walkthrough lives at [`docs/hid-demo.md`](../docs/hid-demo.md).
 
 ## Build prerequisites
 

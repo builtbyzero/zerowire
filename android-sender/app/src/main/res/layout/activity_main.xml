@@ -29,6 +29,16 @@
         android:text="@string/status_idle" />
 
     <TextView
+        android:id="@+id/diagnostic"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="monospace"
+        android:textSize="12sp"
+        tools:ignore="HardcodedText"
+        android:text="listen=...:47823  mDNS…  sessions=0" />
+
+    <TextView
         android:id="@+id/pairing_code_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

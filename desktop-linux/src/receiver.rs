@@ -23,6 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
+use serde_json::json;
 use zerowire_protocol::{
     control::{ControlMessage, DeviceSummary},
     envelope::{Channel, Envelope, HEADER_LEN},
@@ -46,10 +47,17 @@ pub struct ReceiveOpts {
     /// When set, also dial a TCP target directly instead of going via mDNS.
     pub direct_target: Option<String>,
     pub client_name: String,
+    /// When set, write a JSON-line trace of every protocol event to this
+    /// path. Each line is one event; safe to `tail -f`. Used during
+    /// hardware bring-up (see docs/hardware-verify.md).
+    pub diagnose_log: Option<std::path::PathBuf>,
 }
 
 /// Drive a full receive session against a real sender.
 pub fn run_receive(opts: ReceiveOpts, stop: Arc<AtomicBool>) -> Result<()> {
+    let mut diag = DiagnoseLog::open(opts.diagnose_log.as_deref())?;
+    diag.event("start", json!({ "sender_name": opts.sender_name, "direct_target": opts.direct_target }));
+
     let target = if let Some(t) = &opts.direct_target {
         t.clone()
     } else {
@@ -60,14 +68,26 @@ pub fn run_receive(opts: ReceiveOpts, stop: Arc<AtomicBool>) -> Result<()> {
         );
         let senders = discover(opts.discover_timeout)?;
         if senders.is_empty() {
+            diag.event("discover_failed", json!({}));
             bail!("no zerowire senders found on the LAN");
         }
+        diag.event(
+            "discover_ok",
+            json!({
+                "count": senders.len(),
+                "senders": senders.iter().map(|s| {
+                    json!({ "name": s.name, "host": s.host, "port": s.port, "caps": s.capabilities })
+                }).collect::<Vec<_>>(),
+            }),
+        );
         let pick = pick_by_name(&senders, &opts.sender_name)
             .ok_or_else(|| anyhow!("no sender matched name {:?}", opts.sender_name))?;
         format!("{}:{}", pick.host, pick.port)
     };
     log::info!("dialing {}", target);
+    diag.event("dial", json!({ "target": target }));
     let mut sock = dial(&target)?;
+    diag.event("dial_ok", json!({}));
 
     // 1. Handshake.
     send_control(
@@ -79,8 +99,14 @@ pub fn run_receive(opts: ReceiveOpts, stop: Arc<AtomicBool>) -> Result<()> {
         },
     )?;
     match recv_control(&mut sock)? {
-        ControlMessage::HelloAck { name, .. } => log::info!("handshake ok with {}", name),
-        ControlMessage::Error { code, message } => bail!("sender refused: {code}: {message}"),
+        ControlMessage::HelloAck { name, sender_id, supports } => {
+            log::info!("handshake ok with {}", name);
+            diag.event("hello_ack", json!({ "name": name, "sender_id": sender_id, "supports": supports }));
+        }
+        ControlMessage::Error { code, message } => {
+            diag.event("hello_error", json!({ "code": code, "message": message.clone() }));
+            bail!("sender refused: {code}: {message}");
+        }
         other => bail!("unexpected reply to HELLO: {:?}", other),
     }
 
@@ -90,8 +116,22 @@ pub fn run_receive(opts: ReceiveOpts, stop: Arc<AtomicBool>) -> Result<()> {
         ControlMessage::DeviceList { devices } => devices,
         other => bail!("expected DEVICE_LIST, got {:?}", other),
     };
+    diag.event(
+        "device_list",
+        json!({
+            "count": devices.len(),
+            "devices": devices.iter().map(|d| json!({
+                "busid": d.busid,
+                "vendor_id": format!("{:04x}", d.vendor_id),
+                "product_id": format!("{:04x}", d.product_id),
+                "product": d.product,
+                "is_hid": d.is_hid,
+            })).collect::<Vec<_>>(),
+        }),
+    );
     let chosen = pick_hid_device(&devices, opts.busid.as_deref())?;
     log::info!("attaching busid={} ({})", chosen.busid, chosen.product.clone().unwrap_or_default());
+    diag.event("attach_request", json!({ "busid": chosen.busid, "mode": "hid" }));
 
     // 3. ATTACH (hid mode).
     send_control(
@@ -102,8 +142,11 @@ pub fn run_receive(opts: ReceiveOpts, stop: Arc<AtomicBool>) -> Result<()> {
         },
     )?;
     match recv_control(&mut sock)? {
-        ControlMessage::AttachOk { .. } => {}
+        ControlMessage::AttachOk { busid, import_id } => {
+            diag.event("attach_ok", json!({ "busid": busid, "import_id": import_id }));
+        }
         ControlMessage::AttachDenied { busid, reason } => {
+            diag.event("attach_denied", json!({ "busid": busid.clone(), "reason": reason.clone() }));
             bail!("sender denied attach for {busid}: {reason}")
         }
         other => bail!("unexpected reply to ATTACH: {:?}", other),
@@ -122,6 +165,10 @@ pub fn run_receive(opts: ReceiveOpts, stop: Arc<AtomicBool>) -> Result<()> {
     // Loop until we either get a BindAck, the socket dies, or stop is set.
     let mut device: Option<UinputDevice> = None;
     let mut last_seq: u16 = 0;
+    let mut reports_seen: u64 = 0;
+    let session_start = std::time::Instant::now();
+    let mut last_report_log = session_start;
+    diag.event("bind_sent", json!({ "bind_id": bind_id, "busid": chosen.busid }));
 
     while !stop.load(Ordering::Relaxed) {
         let env = match recv_envelope(&mut sock) {
@@ -151,7 +198,21 @@ pub fn run_receive(opts: ReceiveOpts, stop: Arc<AtomicBool>) -> Result<()> {
                             meta.name,
                             descriptor.len()
                         );
+                        diag.event(
+                            "bind_ack",
+                            json!({
+                                "kind": format!("{:?}", meta.kind),
+                                "name": meta.name,
+                                "vendor_id": format!("{:04x}", meta.vendor_id),
+                                "product_id": format!("{:04x}", meta.product_id),
+                                "report_descriptor_len": descriptor.len(),
+                            }),
+                        );
                         device = Some(open_device(&meta)?);
+                        diag.event(
+                            "uinput_created",
+                            json!({ "name": format!("zerowire: {}", meta.name) }),
+                        );
                     }
                     HidOp::ReportIn => {
                         if frame.seq != last_seq.wrapping_add(1) && last_seq != 0 {
@@ -160,20 +221,58 @@ pub fn run_receive(opts: ReceiveOpts, stop: Arc<AtomicBool>) -> Result<()> {
                                 last_seq,
                                 frame.seq
                             );
+                            diag.event(
+                                "seq_jump",
+                                json!({ "prev": last_seq, "got": frame.seq }),
+                            );
                         }
                         last_seq = frame.seq;
                         if let Some(d) = device.as_mut() {
                             apply_report(d, frame.body)?;
+                            reports_seen += 1;
+                            // First few reports get full byte dumps; after
+                            // that we summarize once a second so the diag
+                            // log doesn't explode under a 1kHz gaming mouse.
+                            let now = std::time::Instant::now();
+                            if reports_seen <= 5 {
+                                diag.event(
+                                    "report",
+                                    json!({
+                                        "seq": frame.seq,
+                                        "len": frame.body.len(),
+                                        "bytes": frame.body,
+                                    }),
+                                );
+                            } else if now.duration_since(last_report_log)
+                                >= std::time::Duration::from_secs(1)
+                            {
+                                let elapsed = now.duration_since(session_start).as_secs_f64();
+                                let rate = (reports_seen as f64) / elapsed.max(0.001);
+                                diag.event(
+                                    "report_rate",
+                                    json!({
+                                        "reports_total": reports_seen,
+                                        "elapsed_s": elapsed,
+                                        "reports_per_s": rate,
+                                        "last_seq": frame.seq,
+                                        "last_len": frame.body.len(),
+                                    }),
+                                );
+                                last_report_log = now;
+                            }
                         } else {
                             log::warn!("report before bind_ack; ignoring");
+                            diag.event("report_before_bind_ack", json!({ "seq": frame.seq }));
                         }
                     }
                     HidOp::Unbind => {
                         log::info!("sender unbound: {}", String::from_utf8_lossy(frame.body));
+                        diag.event("unbind", json!({ "from_sender": true, "reports_seen": reports_seen }));
                         break;
                     }
                     other => {
                         log::debug!("unhandled HID op {:?}", other);
+                        diag.event("unhandled_hid_op", json!({ "op": format!("{:?}", other) }));
                     }
                 }
             }
@@ -468,7 +567,21 @@ pub fn run_simulate(stop: Arc<AtomicBool>) -> Result<()> {
 /// `out_path` instead of pushing them through uinput. The integration test
 /// asserts the file content.
 pub fn run_simulate_source(target: &str, out_path: &std::path::Path) -> Result<()> {
+    run_simulate_source_with(target, out_path, None)
+}
+
+/// Same as `run_simulate_source` but also writes a JSON-line trace to
+/// `diagnose_log` when set. Used by hardware-verify scripts that want both
+/// the legacy text log (for asserts) and the diagnostic stream.
+pub fn run_simulate_source_with(
+    target: &str,
+    out_path: &std::path::Path,
+    diagnose_log: Option<&std::path::Path>,
+) -> Result<()> {
+    let mut diag = DiagnoseLog::open(diagnose_log)?;
+    diag.event("start", json!({ "target": target, "simulate_source": out_path }));
     let mut sock = dial(target)?;
+    diag.event("dial_ok", json!({ "target": target }));
 
     send_control(
         &mut sock,
@@ -479,7 +592,9 @@ pub fn run_simulate_source(target: &str, out_path: &std::path::Path) -> Result<(
         },
     )?;
     match recv_control(&mut sock)? {
-        ControlMessage::HelloAck { .. } => {}
+        ControlMessage::HelloAck { name, sender_id, supports } => {
+            diag.event("hello_ack", json!({ "name": name, "sender_id": sender_id, "supports": supports }));
+        }
         other => bail!("HELLO_ACK expected, got {:?}", other),
     }
     send_control(&mut sock, &ControlMessage::ListDevices)?;
@@ -487,7 +602,19 @@ pub fn run_simulate_source(target: &str, out_path: &std::path::Path) -> Result<(
         ControlMessage::DeviceList { devices } => devices,
         other => bail!("DEVICE_LIST expected, got {:?}", other),
     };
+    diag.event(
+        "device_list",
+        json!({
+            "count": devs.len(),
+            "devices": devs.iter().map(|d| json!({
+                "busid": d.busid, "is_hid": d.is_hid, "product": d.product,
+                "vendor_id": format!("{:04x}", d.vendor_id),
+                "product_id": format!("{:04x}", d.product_id),
+            })).collect::<Vec<_>>(),
+        }),
+    );
     let chosen = pick_hid_device(&devs, None)?;
+    diag.event("attach_request", json!({ "busid": chosen.busid, "mode": "hid" }));
     send_control(
         &mut sock,
         &ControlMessage::Attach {
@@ -496,7 +623,9 @@ pub fn run_simulate_source(target: &str, out_path: &std::path::Path) -> Result<(
         },
     )?;
     match recv_control(&mut sock)? {
-        ControlMessage::AttachOk { .. } => {}
+        ControlMessage::AttachOk { busid, import_id } => {
+            diag.event("attach_ok", json!({ "busid": busid, "import_id": import_id }));
+        }
         other => bail!("ATTACH_OK expected, got {:?}", other),
     }
     let bind_json = serde_json::to_vec(&BindRequest {
@@ -522,22 +651,35 @@ pub fn run_simulate_source(target: &str, out_path: &std::path::Path) -> Result<(
         let f = HidFrame::parse(&env.payload)?;
         match f.op {
             HidOp::BindAck => {
-                let (meta, _rd) = parse_bind_ack_body(f.body)?;
+                let (meta, rd) = parse_bind_ack_body(f.body)?;
                 writeln!(log, "bind_ack kind={:?} name={:?}", meta.kind, meta.name)?;
+                diag.event(
+                    "bind_ack",
+                    json!({
+                        "kind": format!("{:?}", meta.kind),
+                        "name": meta.name,
+                        "report_descriptor_len": rd.len(),
+                    }),
+                );
                 got_bind_ack = true;
             }
             HidOp::ReportIn => {
                 writeln!(log, "report seq={} bytes={:?}", f.seq, f.body)?;
+                if report_count < 5 {
+                    diag.event("report", json!({ "seq": f.seq, "bytes": f.body }));
+                }
                 report_count += 1;
             }
             HidOp::Unbind => {
                 writeln!(log, "unbind")?;
+                diag.event("unbind", json!({ "from_sender": true, "reports_seen": report_count }));
                 break;
             }
             _ => {}
         }
     }
     writeln!(log, "summary bind_ack={} reports={}", got_bind_ack, report_count)?;
+    diag.event("summary", json!({ "bind_ack": got_bind_ack, "reports": report_count }));
     Ok(())
 }
 
@@ -567,6 +709,72 @@ pub use zerowire_protocol::envelope::HEADER_LEN as ENVELOPE_HEADER_LEN;
 
 #[allow(unused_imports)]
 use std::io::Write as _;
+
+/// JSON-line diagnostic trace for `--diagnose`. Each call writes one line:
+///
+/// ```json
+/// {"ts":"...","event":"hello_ack","data":{...}}
+/// ```
+///
+/// `None` path → no-op (so the hot loop stays cheap when diagnose is off).
+struct DiagnoseLog {
+    file: Option<std::fs::File>,
+}
+
+impl DiagnoseLog {
+    fn open(path: Option<&std::path::Path>) -> Result<Self> {
+        let file = match path {
+            None => None,
+            Some(p) => Some(
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(p)
+                    .with_context(|| format!("opening diagnose log {}", p.display()))?,
+            ),
+        };
+        let me = Self { file };
+        Ok(me)
+    }
+
+    fn event(&mut self, name: &str, data: serde_json::Value) {
+        let Some(f) = self.file.as_mut() else { return };
+        let line = json!({
+            "ts": chrono_like_now(),
+            "event": name,
+            "data": data,
+        });
+        // Best-effort; diagnostic logging must never panic the session.
+        let _ = writeln!(f, "{}", line);
+        let _ = f.flush();
+    }
+}
+
+/// Cheap UTC timestamp without pulling in chrono. Format: RFC3339-ish,
+/// `1970-01-01T00:00:00.123456Z`. Good enough for human-readable trace.
+fn chrono_like_now() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = now.as_secs() as i64;
+    let micros = now.subsec_micros();
+    // Break down into Y-M-D H:M:S via libc (we already depend on libc).
+    let mut tm = libc::tm {
+        tm_sec: 0, tm_min: 0, tm_hour: 0, tm_mday: 0, tm_mon: 0, tm_year: 0,
+        tm_wday: 0, tm_yday: 0, tm_isdst: 0, tm_gmtoff: 0, tm_zone: std::ptr::null(),
+    };
+    unsafe { libc::gmtime_r(&secs as *const i64 as *const libc::time_t, &mut tm); }
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:06}Z",
+        tm.tm_year + 1900,
+        tm.tm_mon + 1,
+        tm.tm_mday,
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec,
+        micros,
+    )
+}
 
 #[cfg(test)]
 mod tests {

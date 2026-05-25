@@ -9,7 +9,9 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use zerowire_cli::discovery::discover;
-use zerowire_cli::receiver::{run_receive, run_simulate, run_simulate_source, ReceiveOpts};
+use zerowire_cli::receiver::{
+    run_receive, run_simulate, run_simulate_source, run_simulate_source_with, ReceiveOpts,
+};
 use zerowire_cli::wire::{recv_control, send_control};
 
 use zerowire_protocol::control::{ControlMessage, DeviceSummary};
@@ -68,6 +70,11 @@ enum Cmd {
         /// mDNS browse timeout in seconds.
         #[arg(long, default_value_t = 5)]
         timeout: u64,
+        /// Write a JSON-line trace of every protocol event to this path.
+        /// `tail -f` it during hardware bring-up. See
+        /// `docs/hardware-verify.md` for the recipe.
+        #[arg(long)]
+        diagnose: Option<PathBuf>,
     },
 }
 
@@ -93,6 +100,7 @@ fn main() -> Result<()> {
             simulate,
             simulate_source,
             timeout,
+            diagnose,
         } => {
             let stop = Arc::new(AtomicBool::new(false));
             install_ctrlc(stop.clone())?;
@@ -101,7 +109,14 @@ fn main() -> Result<()> {
             }
             if let Some(log_path) = simulate_source {
                 let tgt = target.unwrap_or_else(|| "127.0.0.1:47823".to_string());
+                if let Some(p) = &diagnose {
+                    eprintln!("(diagnose log → {})", p.display());
+                    return run_simulate_source_with(&tgt, &log_path, Some(p.as_path()));
+                }
                 return run_simulate_source(&tgt, &log_path);
+            }
+            if let Some(p) = &diagnose {
+                eprintln!("(diagnose log → {})", p.display());
             }
             run_receive(
                 ReceiveOpts {
@@ -110,6 +125,7 @@ fn main() -> Result<()> {
                     busid,
                     direct_target: target,
                     client_name: CLIENT_NAME.into(),
+                    diagnose_log: diagnose,
                 },
                 stop,
             )

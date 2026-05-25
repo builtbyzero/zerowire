@@ -4,7 +4,7 @@
 
 builtbyzero · MIT-spirited / Apache-2.0 licensed.
 
-> **Status: v0.1 HID fast-lane is wired end-to-end on Linux.** Mock-sender ⇄ Linux receiver loopback works (see [`docs/hid-demo.md`](./docs/hid-demo.md) and [`tests/hid_loopback.sh`](./tests/hid_loopback.sh)). The Android sender still needs hardware verification; see the manual test plan in the demo doc. USB/IP passthrough for non-HID devices is the next milestone. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full target system.
+> **Status: v0.1 HID fast-lane is wired end-to-end on Linux.** Mock-sender ⇄ Linux receiver loopback works (see [`docs/hid-demo.md`](./docs/hid-demo.md) and [`tests/hid_loopback.sh`](./tests/hid_loopback.sh)). The Android sender still needs hardware verification; **runbook + pass/fail matrix in [`docs/hardware-verify.md`](./docs/hardware-verify.md)**. USB/IP passthrough for non-HID devices is the next milestone. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full target system.
 
 ## What it does (when finished)
 

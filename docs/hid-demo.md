@@ -110,6 +110,10 @@ want to confirm uinput permissions before bothering with the sender side.
 > **Honesty:** the Android side compiled and was code-reviewed but **was
 > not run against real hardware on this build host**. Treat this section as
 > a smoke-test plan, not a confirmation.
+>
+> **For the runbook with pass/fail matrix, evidence-capture commands, and
+> the `--diagnose` JSON-line trace, see [`hardware-verify.md`](./hardware-verify.md).**
+> The summary below is the 30-second version.
 
 1. Build the sender:
 
