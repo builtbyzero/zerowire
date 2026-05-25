@@ -138,6 +138,81 @@ impl<'a> UsbipFrame<'a> {
     }
 }
 
+// ---------------- v0.2 general-passthrough framing ----------------
+//
+// The HID fast lane multiplexes one device per session and synthesizes input
+// events on the receiver side. For non-HID devices (mass storage, MIDI,
+// printers, generic) we need to relay the full USB/IP packet stream so the
+// receiver kernel's `vhci-hcd` driver can drive the device as if it were
+// physically attached. The framing below is the minimum we need on the wire
+// to:
+//
+//   * Tell the receiver which USB device is being attached (so it can pick
+//     a free vhci-hcd port and an `import_id`),
+//   * Carry opaque URBs in both directions.
+//
+// The descriptor blob is the raw `usb_device_descriptor` (18 bytes,
+// little-endian) plus the speed byte (USB/IP convention: 1=low, 2=full,
+// 3=high, 5=super). We don't try to enumerate config/interface descriptors
+// here — vhci-hcd asks for them via SUBMIT/GET_DESCRIPTOR URBs once
+// attached.
+
+/// USB/IP speed code, per the kernel header `linux/usb/ch9.h`
+/// (`usb_device_speed`). Used both in our `UsbipAttachInfo` and when writing
+/// to `/sys/devices/platform/vhci_hcd.0/attach`.
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum UsbipSpeed {
+    Unknown = 0,
+    Low = 1,
+    Full = 2,
+    High = 3,
+    Wireless = 4,
+    Super = 5,
+    SuperPlus = 6,
+}
+
+impl UsbipSpeed {
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => UsbipSpeed::Low,
+            2 => UsbipSpeed::Full,
+            3 => UsbipSpeed::High,
+            4 => UsbipSpeed::Wireless,
+            5 => UsbipSpeed::Super,
+            6 => UsbipSpeed::SuperPlus,
+            _ => UsbipSpeed::Unknown,
+        }
+    }
+}
+
+/// On-wire info the sender pushes to the receiver immediately after
+/// `ATTACH_OK { mode: "usbip" }`. The receiver uses these fields verbatim
+/// when telling its kernel to take ownership of the TCP socket.
+///
+/// JSON over the control channel rather than binary because attach is a
+/// once-per-device event; the volume is irrelevant and JSON is easier to
+/// debug. Bulk URBs ride on `Channel::Usbip` as `UsbipFrame`s.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct UsbipAttachInfo {
+    /// USB/IP busid, e.g. `"1-2"`. Stable per physical port; the receiver
+    /// uses this string when telling vhci-hcd to take the socket.
+    pub busid: String,
+    /// Sender-side per-session ID, multiplexed inside `UsbipFrame.import_id`.
+    pub import_id: u32,
+    /// vhci-hcd device id: `(busnum << 16) | devnum`, per the kernel
+    /// sysfs interface.
+    pub devid: u32,
+    /// USB device speed, see [`UsbipSpeed`].
+    pub speed: u8,
+    pub vendor_id: u16,
+    pub product_id: u16,
+    /// Hex-encoded raw `usb_device_descriptor` (18 bytes). Optional — the
+    /// receiver doesn't actually need it for vhci-hcd attach, but it's
+    /// useful for logging/sim and we already have it on the sender side.
+    pub descriptor_hex: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -69,6 +69,15 @@ pub enum ControlMessage {
     /// Sender → receiver. Sender's per-session import_id for this device.
     #[serde(rename = "ATTACH_OK")]
     AttachOk { busid: String, import_id: u32 },
+    /// Sender → receiver. Same as `ATTACH_OK` for HID, but carries the
+    /// extra metadata the receiver needs to plug the device into the host's
+    /// `vhci-hcd` driver (devid, speed, optional raw descriptor).
+    /// Sent when `Attach.mode == "usbip"`.
+    #[serde(rename = "ATTACH_OK_USBIP")]
+    AttachOkUsbip {
+        #[serde(flatten)]
+        info: crate::usbip::UsbipAttachInfo,
+    },
     /// Sender → receiver. The user denied or the device vanished.
     #[serde(rename = "ATTACH_DENIED")]
     AttachDenied { busid: String, reason: String },
@@ -124,5 +133,24 @@ mod tests {
     fn unknown_op_errors_clean() {
         let raw = br#"{"op":"NOPE"}"#;
         assert!(ControlMessage::from_json(raw).is_err());
+    }
+
+    #[test]
+    fn attach_ok_usbip_round_trip() {
+        use crate::usbip::UsbipAttachInfo;
+        let m = ControlMessage::AttachOkUsbip {
+            info: UsbipAttachInfo {
+                busid: "1-2".into(),
+                import_id: 7,
+                devid: (1u32 << 16) | 4,
+                speed: 3,
+                vendor_id: 0xBADD,
+                product_id: 0xC0DE,
+                descriptor_hex: Some("12010002000000408badde c0ff112233010000".replace(' ', "")),
+            },
+        };
+        let bytes = m.to_json().unwrap();
+        let back = ControlMessage::from_json(&bytes).unwrap();
+        assert_eq!(m, back);
     }
 }

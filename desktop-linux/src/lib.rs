@@ -8,5 +8,8 @@
 pub mod discovery;
 pub mod hid_descriptor;
 pub mod receiver;
+pub mod tls;
 pub mod uinput;
+pub mod usbip;
+pub mod usbip_receiver;
 pub mod wire;
