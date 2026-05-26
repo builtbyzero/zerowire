@@ -1,0 +1,36 @@
+[package]
+name = "zerowire-gui"
+version = "0.4.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "zerowire Linux GUI receiver — thin wrapper over zerowire-cli with QR pairing and a desktop window."
+default-run = "zerowire-gui"
+
+[[bin]]
+name = "zerowire-gui"
+path = "src/main.rs"
+
+[dependencies]
+zerowire-cli = { path = "../desktop-linux" }
+zerowire-protocol = { path = "../protocol" }
+anyhow = "1"
+log = "0.4"
+env_logger = "0.11"
+qrcode = { version = "0.14", default-features = false }
+rand = "0.8"
+# egui pulls eframe pulls glow/winit — pure-Rust window stack, no system
+# GTK headers required at build time.
+eframe = { version = "0.28", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui = "0.28"
+egui_extras = { version = "0.28", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+local-ip-address = "0.6"
+
+# Optional system-tray icon. Disabled by default so a clean `cargo build`
+# works on minimal Linuxes; flip with `--features tray` once you have
+# libayatana-appindicator3 (or libappindicator3) installed. See README.md.
+ksni = { version = "0.2", optional = true }
+
+[features]
+default = []
+tray = ["dep:ksni"]

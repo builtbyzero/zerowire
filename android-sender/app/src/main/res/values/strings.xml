@@ -2,11 +2,56 @@
 <resources>
     <string name="app_name">zerowire</string>
     <string name="tagline">Share any USB device over WiFi.</string>
-    <string name="status_idle">Idle — plug in a USB device to share.</string>
-    <string name="status_advertising">Advertising on the LAN.</string>
+
+    <!-- Top-level screen states -->
+    <string name="status_idle">No USB device plugged in</string>
+    <string name="status_idle_hint">Plug a USB device into your phone to share it.</string>
+    <string name="status_attached">Ready to share</string>
+    <string name="status_attached_hint">Tap below to start streaming this device to your computer.</string>
+    <string name="status_sharing">Sharing</string>
+    <string name="status_sharing_hint">Tap Stop to disconnect.</string>
+    <string name="status_error_label">Something went wrong</string>
+
+    <!-- Receiver pairing -->
+    <string name="receiver_address_label">Receiver address</string>
+    <string name="receiver_address_placeholder">192.168.1.42:47823</string>
+    <string name="receiver_address_remembered">Remembered from last session.</string>
     <string name="pairing_code_label">Pairing code</string>
-    <string name="no_devices">No USB devices plugged in.</string>
-    <string name="connect_hint">From your computer, run:</string>
-    <string name="connect_command">zerowire-cli receive --sender "%1$s"</string>
-    <string name="v01_note">v0.1: pairing code is informational only — the session handshake is plaintext on this LAN. TLS + PSK proof land in v0.2.</string>
+    <string name="pairing_scan_action">Scan pairing QR</string>
+    <string name="pairing_manual_action">Enter pairing code</string>
+    <string name="pairing_scan_prompt">Point at the QR code on your computer.</string>
+    <string name="pairing_scan_bad">Couldn\'t read pairing QR. Try again.</string>
+    <string name="pairing_scan_label">Pair from QR</string>
+
+    <!-- Action buttons -->
+    <string name="action_share">Start sharing</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_grant_usb">Allow USB access</string>
+    <string name="action_request_notification_permission">Allow notifications</string>
+
+    <!-- Device list -->
+    <string name="device_list_title">Plugged-in USB devices</string>
+    <string name="no_devices">Nothing plugged in.</string>
+    <string name="device_kind_hid">Mouse / keyboard / gamepad</string>
+    <string name="device_kind_storage">USB drive</string>
+    <string name="device_kind_other">USB device</string>
+
+    <!-- Notification -->
+    <string name="notif_channel_name">zerowire status</string>
+    <string name="notif_channel_description">Persistent notification shown while sharing a USB device.</string>
+    <string name="notif_idle_title">zerowire</string>
+    <string name="notif_idle_text">Ready. No device shared.</string>
+    <string name="notif_connected_title">Receiver connected</string>
+    <string name="notif_connected_text">Connected to %1$s</string>
+    <string name="notif_sharing_title">Sharing %1$s</string>
+    <string name="notif_sharing_text">→ %1$s · %2$s</string>
+    <string name="notif_error_title">zerowire error</string>
+    <string name="notif_stop_action">Stop</string>
+
+    <!-- Errors -->
+    <string name="error_usb_denied">USB access denied. Tap the device to retry.</string>
+    <string name="error_no_receiver">Set a receiver address first.</string>
+
+    <!-- v0.4 banner -->
+    <string name="v04_note">v0.4: USB acquisition + foreground service. Hardware end-to-end test pending — see docs/v0.4-hardware-test.md.</string>
 </resources>
