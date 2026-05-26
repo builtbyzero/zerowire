@@ -36,6 +36,11 @@ pub struct UsbipReceiveOpts {
     /// When `Some`, write the attach transcript and per-URB summary here
     /// instead of touching `vhci-hcd`.
     pub simulate_transcript: Option<PathBuf>,
+    /// In simulate mode, also drive a scripted URB sequence against the
+    /// sender's pump (issues GET_DESCRIPTOR / bulk IN / bulk OUT / unlink).
+    /// The count adds N extra bulk-IN URBs on top of the base 7-step script.
+    /// `None` => v0.2 behaviour: passively log frames the sender pushes.
+    pub simulate_drive_urbs: Option<u32>,
 }
 
 /// Drive a USB/IP receive session. Returns when the sender unbinds or the
@@ -110,10 +115,38 @@ pub fn run_usbip_receive(opts: UsbipReceiveOpts, stop: Arc<AtomicBool>) -> Resul
     };
 
     if let Some(transcript) = opts.simulate_transcript {
+        if let Some(n_extra) = opts.simulate_drive_urbs {
+            return run_simulated_drive(&mut sock, &info, &transcript, n_extra);
+        }
         return run_simulated(&mut sock, &info, &transcript, stop);
     }
 
     run_real(sock, &info)
+}
+
+/// Simulated attach **plus** an active URB-issuing driver. Used by the
+/// v0.3 android-pump loopback test to round-trip real CMD_SUBMIT /
+/// CMD_UNLINK packets against the sender pump (fixture or real phone).
+fn run_simulated_drive(
+    sock: &mut TcpStream,
+    info: &UsbipAttachInfo,
+    transcript: &std::path::Path,
+    n_extra_bulk: u32,
+) -> Result<()> {
+    let sim = SimulatedAttach::create(transcript, info)?;
+    log::info!(
+        "simulated vhci-driver attach: port={} busid={} import_id={}",
+        sim.port(),
+        sim.busid(),
+        info.import_id,
+    );
+    let script = crate::urb_driver::script_default(n_extra_bulk, info.devid);
+    let stats = crate::urb_driver::run_script(sock, info.import_id, &script, transcript)?;
+    log::info!(
+        "simulated drive complete: urbs_issued={} urbs_ok={} unlinks_issued={} unlinks_ok={} bytes={}",
+        stats.urbs_issued, stats.urbs_ok, stats.unlinks_issued, stats.unlinks_ok, stats.bytes_returned,
+    );
+    Ok(())
 }
 
 /// Real `vhci-hcd` attach. The socket is consumed by the kernel.
@@ -285,6 +318,7 @@ mod tests {
             busid: None,
             client_name: "test-client".into(),
             simulate_transcript: Some(transcript.clone()),
+            simulate_drive_urbs: None,
         };
         run_usbip_receive(opts, stop).unwrap();
         server.join().unwrap();

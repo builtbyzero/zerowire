@@ -85,6 +85,14 @@ enum Cmd {
         /// touching vhci-hcd. Used by tests/usbip_loopback.sh.
         #[arg(long)]
         simulate_usbip: Option<PathBuf>,
+        /// In simulate mode, additionally **drive** a deterministic URB
+        /// script against the sender pump (issues GET_DESCRIPTOR, bulk
+        /// IN/OUT, CMD_UNLINK; asserts RET_SUBMIT contents). Pass `0`
+        /// for the base 7-URB script; higher values append N extra bulk
+        /// IN URBs. Used by tests/android_pump_loopback.sh. Requires
+        /// `--simulate-usbip <path>` for the transcript.
+        #[arg(long)]
+        simulate_drive_urbs: Option<u32>,
         /// Pairing code for TLS 1.3 PSK auth. When set, the connection is
         /// wrapped in TLS using the deterministic-cert identity derived
         /// from this code. Same code must be supplied on the sender.
@@ -124,6 +132,7 @@ fn main() -> Result<()> {
             simulate,
             simulate_source,
             simulate_usbip,
+            simulate_drive_urbs,
             psk,
             timeout,
             diagnose,
@@ -168,6 +177,7 @@ fn main() -> Result<()> {
                             &tgt,
                             busid,
                             simulate_usbip,
+                            simulate_drive_urbs,
                             psk.as_deref(),
                             stop,
                         );
@@ -178,6 +188,7 @@ fn main() -> Result<()> {
                             busid,
                             client_name: CLIENT_NAME.into(),
                             simulate_transcript: simulate_usbip,
+                            simulate_drive_urbs,
                         },
                         stop,
                     )
@@ -219,10 +230,12 @@ fn run_usbip_receive_tls(
     target: &str,
     busid: Option<String>,
     simulate_transcript: Option<PathBuf>,
+    simulate_drive_urbs: Option<u32>,
     psk: Option<&str>,
     stop: Arc<AtomicBool>,
 ) -> Result<()> {
     use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+    use zerowire_cli::urb_driver;
     use zerowire_cli::usbip::SimulatedAttach;
     use zerowire_protocol::envelope::Channel;
     use zerowire_protocol::usbip::{UsbipAttachInfo, UsbipFrame};
@@ -291,6 +304,16 @@ fn run_usbip_receive_tls(
     };
     let sim = SimulatedAttach::create(&transcript, &info)?;
     log::info!("tls+usbip simulated session started on port={}", sim.port());
+
+    if let Some(n_extra) = simulate_drive_urbs {
+        let script = urb_driver::script_default(n_extra, info.devid);
+        let stats = urb_driver::run_script(&mut s, info.import_id, &script, &transcript)?;
+        log::info!(
+            "tls+usbip drive complete: urbs_issued={} urbs_ok={} unlinks={} bytes={}",
+            stats.urbs_issued, stats.urbs_ok, stats.unlinks_issued, stats.bytes_returned,
+        );
+        return Ok(());
+    }
 
     let mut frames = 0u32;
     while !stop.load(Ordering::Relaxed) {

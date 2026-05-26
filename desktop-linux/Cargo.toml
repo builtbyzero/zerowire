@@ -22,6 +22,10 @@ path = "src/bin/mock_sender.rs"
 name = "zerowire-linux-sender"
 path = "src/bin/linux_sender.rs"
 
+[[bin]]
+name = "zerowire-simulate-android-pump"
+path = "src/bin/simulate_android_pump.rs"
+
 [dependencies]
 zerowire-protocol = { path = "../protocol" }
 clap = { version = "4", features = ["derive"] }
