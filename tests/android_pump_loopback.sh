@@ -23,11 +23,11 @@
 set -euo pipefail
 
 N="${1:-3}"
-PSK_FLAG=""
+PSK_FLAG=()
 PSK_ARG=""
 if [ "${2:-}" = "--psk" ]; then
     PSK_ARG="psk-android-pump-$RANDOM"
-    PSK_FLAG="--psk $PSK_ARG"
+    PSK_FLAG=(--psk "$PSK_ARG")
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -64,13 +64,13 @@ set +e
 RUST_LOG=info ./target/debug/zerowire-cli receive \
     --mode usbip \
     --target "127.0.0.1:$PORT" \
-    $PSK_FLAG \
+    "${PSK_FLAG[@]}" \
     --simulate-usbip "$TRANSCRIPT" \
     --simulate-drive-urbs "$N" > "$RX_OUT" 2>&1
 RX_EXIT=$?
 set -e
 
-wait "$PUMP_PID" || PUMP_EXIT=$?
+wait "$PUMP_PID" || true
 
 echo "[android_pump_loopback] pump log:";    sed 's/^/    | /' "$PUMP_LOG"
 echo "[android_pump_loopback] receiver log:"; sed 's/^/    | /' "$RX_OUT"
