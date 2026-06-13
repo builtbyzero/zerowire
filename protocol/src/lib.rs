@@ -18,9 +18,11 @@ pub mod usbip;
 pub mod hid;
 pub mod control;
 pub mod discovery;
+pub mod psk;
 
 pub use envelope::{Channel, Envelope, EnvelopeError, MAGIC, PROTOCOL_VERSION};
 pub use hid::{
     encode_bind_ack_body, parse_bind_ack_body, BindAckMeta, BindRequest, DeviceKind, HidError,
     HidFrame, HidOp, HID_HEADER_LEN,
 };
+pub use psk::{derive_psk, derive_tls_cert_seed, derive_with_info, PSK_INFO, PSK_LEN, PSK_SALT};

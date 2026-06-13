@@ -4,7 +4,7 @@
 
 builtbyzero · MIT-spirited / Apache-2.0 licensed.
 
-> **Status: v0.1 HID fast-lane is wired end-to-end on Linux.** Mock-sender ⇄ Linux receiver loopback works (see [`docs/hid-demo.md`](./docs/hid-demo.md) and [`tests/hid_loopback.sh`](./tests/hid_loopback.sh)). The Android sender still needs hardware verification; **runbook + pass/fail matrix in [`docs/hardware-verify.md`](./docs/hardware-verify.md)**. USB/IP passthrough for non-HID devices is the next milestone. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full target system.
+> **Status: v0.2 — TLS 1.3 PSK auth + USB/IP general passthrough (simulated).** v0.1 HID fast-lane is wired end-to-end on Linux (mock-sender ⇄ Linux receiver loopback; see [`docs/hid-demo.md`](./docs/hid-demo.md) and [`tests/hid_loopback.sh`](./tests/hid_loopback.sh)). Android sender hardware verification runbook + pass/fail matrix in [`docs/hardware-verify.md`](./docs/hardware-verify.md); synthetic kernel-loopback harness in [`docs/synthetic-hw-verify.md`](./docs/synthetic-hw-verify.md). v0.2 adds: TLS 1.3 mutual auth keyed by a pairing-code PSK ([`docs/tls-psk.md`](./docs/tls-psk.md)) and a USB/IP receive path that targets `vhci-hcd` on real hardware or a transcript file on CI ([`docs/usbip-passthrough.md`](./docs/usbip-passthrough.md)). Loopback tests cover all three paths. The Android sender side of USB/IP host-export remains stubbed — AOSP doesn't ship `usbip-host`; see [`android-sender/app/src/main/kotlin/.../UsbIpHost.kt`](./android-sender/app/src/main/kotlin/zero/builtby/zerowire/sender/UsbIpHost.kt) for the gap and the v0.3 plan. Full target system: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ## What it does (when finished)
 
@@ -85,7 +85,10 @@ No permission to open `/dev/uinput`? Run the integration test, which
 logs report bytes to a file instead:
 
 ```bash
-./tests/hid_loopback.sh        # passes locally; ~1s wall time
+./tests/hid_loopback.sh        # v0.1 HID fast lane — passes locally; ~1s wall time
+./tests/tls_psk_loopback.sh    # v0.2 TLS 1.3 PSK end-to-end (right + wrong PSK)
+./tests/usbip_loopback.sh      # v0.2 USB/IP simulated vhci attach
+./tests/usbip_loopback.sh 25 --psk   # v0.2 USB/IP over TLS PSK
 ```
 
 ### Android sender
@@ -102,11 +105,12 @@ cd android-sender
 ## Roadmap
 
 - **v0 (done):** architecture, protocol skeleton, walking skeletons that compile.
-- **v0.1 (in progress):** HID fast-lane end-to-end. Linux receiver + mock
-  sender loopback verified. Android sender code shipped, awaiting hardware
-  test.
-- **v0.2:** USB/IP passthrough on Linux receiver against a real USB stick.
-- **v0.3:** Windows receiver with bundled `usbip-win2`.
+- **v0.1 (done):** HID fast-lane end-to-end. Linux receiver + mock sender loopback verified.
+- **v0.2 (this branch):**
+  - TLS 1.3 mutual auth keyed by a pairing-code PSK (HKDF-SHA256 → deterministic Ed25519 cert; both sides pin). Wrong PSK → handshake fails. Loopback-verified.
+  - USB/IP receive path for non-HID devices: real `vhci-hcd` attach on hardware; `--simulate-usbip <log>` transcript path for CI. Loopback-verified.
+  - Android side: PSK derivation Kotlin port + TLS-server scaffolding shipped. URB-pump and deterministic-cert builder are stubs (see [`UsbIpHost.kt`](./android-sender/app/src/main/kotlin/zero/builtby/zerowire/sender/UsbIpHost.kt) and [`TlsServer.kt`](./android-sender/app/src/main/kotlin/zero/builtby/zerowire/sender/TlsServer.kt) — both honestly mark what's left).
+- **v0.3:** Android-side USB/IP URB-pump shim + Windows receiver with bundled `usbip-win2`.
 - **v0.4:** macOS HID-only receiver.
 - **v0.5:** Android receiver via Accessibility Service.
 - **v1.0:** all of the above + paid tier.
