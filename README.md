@@ -4,7 +4,7 @@
 
 builtbyzero · MIT-spirited / Apache-2.0 licensed.
 
-> **Status: v0.2 — TLS 1.3 PSK auth + USB/IP general passthrough (simulated).** v0.1 HID fast-lane is wired end-to-end on Linux (mock-sender ⇄ Linux receiver loopback; see [`docs/hid-demo.md`](./docs/hid-demo.md) and [`tests/hid_loopback.sh`](./tests/hid_loopback.sh)). Android sender hardware verification runbook + pass/fail matrix in [`docs/hardware-verify.md`](./docs/hardware-verify.md); synthetic kernel-loopback harness in [`docs/synthetic-hw-verify.md`](./docs/synthetic-hw-verify.md). v0.2 adds: TLS 1.3 mutual auth keyed by a pairing-code PSK ([`docs/tls-psk.md`](./docs/tls-psk.md)) and a USB/IP receive path that targets `vhci-hcd` on real hardware or a transcript file on CI ([`docs/usbip-passthrough.md`](./docs/usbip-passthrough.md)). Loopback tests cover all three paths. The Android sender side of USB/IP host-export remains stubbed — AOSP doesn't ship `usbip-host`; see [`android-sender/app/src/main/kotlin/.../UsbIpHost.kt`](./android-sender/app/src/main/kotlin/zero/builtby/zerowire/sender/UsbIpHost.kt) for the gap and the v0.3 plan. Full target system: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+> **Status: v0.3 — Android-side userspace USB/IP URB pump.** v0.1 HID fast-lane and v0.2 TLS 1.3 PSK auth + receiver-side `vhci-hcd` attach still work end-to-end (loopback tests: [`tests/hid_loopback.sh`](./tests/hid_loopback.sh), [`tests/tls_psk_loopback.sh`](./tests/tls_psk_loopback.sh), [`tests/usbip_loopback.sh`](./tests/usbip_loopback.sh)). Synthetic kernel-loopback hardware-verify harness lives in [`docs/synthetic-hw-verify.md`](./docs/synthetic-hw-verify.md). v0.3 fills the v0.2 stub: AOSP doesn't ship `CONFIG_USBIP_HOST`, so the sender pumps URBs from userspace via `UsbDeviceConnection.{controlTransfer, bulkTransfer}`. Control, bulk, and interrupt transfers all work; isochronous returns `-EOPNOTSUPP` cleanly (`UsbDeviceConnection` doesn't expose iso). Wire format is verified by a Rust fixture (`zerowire-simulate-android-pump`) and `tests/android_pump_loopback.sh`; real-phone validation is hardware-pending — see [`docs/hardware-verify.md`](./docs/hardware-verify.md). Design and trade-offs in [`docs/usbip-android-pump.md`](./docs/usbip-android-pump.md). Full target system: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ## What it does (when finished)
 
@@ -85,10 +85,12 @@ No permission to open `/dev/uinput`? Run the integration test, which
 logs report bytes to a file instead:
 
 ```bash
-./tests/hid_loopback.sh        # v0.1 HID fast lane — passes locally; ~1s wall time
-./tests/tls_psk_loopback.sh    # v0.2 TLS 1.3 PSK end-to-end (right + wrong PSK)
-./tests/usbip_loopback.sh      # v0.2 USB/IP simulated vhci attach
-./tests/usbip_loopback.sh 25 --psk   # v0.2 USB/IP over TLS PSK
+./tests/hid_loopback.sh                  # v0.1 HID fast lane — passes locally; ~1s wall time
+./tests/tls_psk_loopback.sh              # v0.2 TLS 1.3 PSK end-to-end (right + wrong PSK)
+./tests/usbip_loopback.sh                # v0.2 USB/IP simulated vhci attach
+./tests/usbip_loopback.sh 25 --psk       # v0.2 USB/IP over TLS PSK
+./tests/android_pump_loopback.sh 3       # v0.3 Android URB pump (Rust fixture)
+./tests/android_pump_loopback.sh 5 --psk # v0.3 URB pump over TLS PSK
 ```
 
 ### Android sender
@@ -110,7 +112,7 @@ cd android-sender
   - TLS 1.3 mutual auth keyed by a pairing-code PSK (HKDF-SHA256 → deterministic Ed25519 cert; both sides pin). Wrong PSK → handshake fails. Loopback-verified.
   - USB/IP receive path for non-HID devices: real `vhci-hcd` attach on hardware; `--simulate-usbip <log>` transcript path for CI. Loopback-verified.
   - Android side: PSK derivation Kotlin port + TLS-server scaffolding shipped. URB-pump and deterministic-cert builder are stubs (see [`UsbIpHost.kt`](./android-sender/app/src/main/kotlin/zero/builtby/zerowire/sender/UsbIpHost.kt) and [`TlsServer.kt`](./android-sender/app/src/main/kotlin/zero/builtby/zerowire/sender/TlsServer.kt) — both honestly mark what's left).
-- **v0.3:** Android-side USB/IP URB-pump shim + Windows receiver with bundled `usbip-win2`.
+- **v0.3 (this branch):** Android-side USB/IP URB-pump shim — userspace dispatch of `CMD_SUBMIT`/`CMD_UNLINK` to `UsbDeviceConnection.{control,bulk}Transfer`, with the Rust `simulate-android-pump` fixture as a hardware stand-in for CI. Iso transfers documented as unsupported on AOSP. Windows receiver (`usbip-win2`) deferred to v0.4.
 - **v0.4:** macOS HID-only receiver.
 - **v0.5:** Android receiver via Accessibility Service.
 - **v1.0:** all of the above + paid tier.
