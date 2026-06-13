@@ -1,0 +1,63 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust-test:
+    name: cargo test (protocol + desktop-linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo test (protocol)
+        if: hashFiles('protocol/Cargo.toml') != ''
+        working-directory: protocol
+        run: cargo test --locked
+      - name: cargo test (desktop-linux)
+        if: hashFiles('desktop-linux/Cargo.toml') != ''
+        working-directory: desktop-linux
+        run: cargo test --locked
+
+  rust-check-gui:
+    name: cargo check desktop-linux-gui (no tray)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo check (no tray feature)
+        if: hashFiles('desktop-linux-gui/Cargo.toml') != ''
+        working-directory: desktop-linux-gui
+        run: cargo check --locked --no-default-features
+
+  android-test:
+    name: android unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: gradle test
+        if: hashFiles('android-sender/build.gradle.kts') != ''
+        working-directory: android-sender
+        run: ./gradlew test --no-daemon
+
+  shellcheck:
+    name: shellcheck tests/*.sh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          shopt -s nullglob
+          files=(tests/*.sh)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No shell scripts under tests/, skipping."
+            exit 0
+          fi
+          shellcheck "${files[@]}"
