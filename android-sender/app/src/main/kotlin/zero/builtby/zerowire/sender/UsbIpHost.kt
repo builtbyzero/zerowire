@@ -11,6 +11,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Sender-side USB/IP host: a **userspace** URB pump that translates
@@ -80,6 +81,14 @@ class UsbIpHost(
     /** Cancelled-seqnum set; cleared as URBs complete. */
     private val cancelled = ConcurrentHashMap<Int, Unit>()
     private val stopped = AtomicBoolean(false)
+
+    /**
+     * Running total of payload bytes the pump has moved in **either**
+     * direction. Read by the foreground service to populate the
+     * "transferring at N kB/s" line in the notification.
+     */
+    private val bytesTransferred = AtomicLong(0)
+    fun bytesTransferred(): Long = bytesTransferred.get()
 
     init {
         val eps = mutableMapOf<Int, UsbEndpoint>()
@@ -276,6 +285,7 @@ class UsbIpHost(
             sendRetSubmit(output, cmd.seqnum, status = -ETIMEDOUT, actualLength = 0)
             return
         }
+        bytesTransferred.addAndGet(n.toLong())
         val payload = if (isIn) buf.copyOf(n) else EMPTY
         sendRetSubmit(output, cmd.seqnum, status = 0, actualLength = n, data = payload)
     }
@@ -319,6 +329,7 @@ class UsbIpHost(
             sendRetSubmit(output, cmd.seqnum, status = -ETIMEDOUT, actualLength = 0)
             return
         }
+        bytesTransferred.addAndGet(n.toLong())
         sendRetSubmit(output, cmd.seqnum, status = 0, actualLength = n, data = payload)
     }
 

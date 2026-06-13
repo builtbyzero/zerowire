@@ -93,6 +93,23 @@ class ReceiverSession(
         try { socket.close() } catch (_: Throwable) {}
     }
 
+    /**
+     * Cumulative payload bytes the session has moved across the socket.
+     * Currently zero for HID-only sessions because the HID fast lane
+     * runs above the URB pump; the usbip-ATTACH path that does wire to
+     * [UsbIpHost.bytesTransferred] is the v0.4 follow-up (it needs the
+     * acquisition-layer plumbing landed in this same PR before it can
+     * be hooked up).
+     */
+    fun bytesTransferred(): Long = activeUsbIpHost?.bytesTransferred() ?: 0L
+
+    /**
+     * Slot for the URB pump owned by this session. Populated by the
+     * usbip-mode ATTACH branch when it eventually exists; today only
+     * HID mode runs and this stays null.
+     */
+    @Volatile private var activeUsbIpHost: UsbIpHost? = null
+
     // ---------------- internals ----------------
 
     private fun runHidBinding(

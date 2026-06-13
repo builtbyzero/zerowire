@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Base theme: a thin Material-You-friendly skin that's mostly invisible
+  because the actual UI is Compose Material 3. We still need a manifest
+  theme so the system has something to draw before Compose takes over;
+  inheriting from Material3.DayNight.NoActionBar matches the system bar
+  treatment Compose expects.
+-->
+<resources>
+    <style name="Theme.Zerowire" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">?attr/colorSurface</item>
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
+    </style>
+</resources>

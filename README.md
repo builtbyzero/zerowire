@@ -4,7 +4,7 @@
 
 builtbyzero · MIT-spirited / Apache-2.0 licensed.
 
-> **Status: v0.3 — Android-side userspace USB/IP URB pump.** v0.1 HID fast-lane and v0.2 TLS 1.3 PSK auth + receiver-side `vhci-hcd` attach still work end-to-end (loopback tests: [`tests/hid_loopback.sh`](./tests/hid_loopback.sh), [`tests/tls_psk_loopback.sh`](./tests/tls_psk_loopback.sh), [`tests/usbip_loopback.sh`](./tests/usbip_loopback.sh)). Synthetic kernel-loopback hardware-verify harness lives in [`docs/synthetic-hw-verify.md`](./docs/synthetic-hw-verify.md). v0.3 fills the v0.2 stub: AOSP doesn't ship `CONFIG_USBIP_HOST`, so the sender pumps URBs from userspace via `UsbDeviceConnection.{controlTransfer, bulkTransfer}`. Control, bulk, and interrupt transfers all work; isochronous returns `-EOPNOTSUPP` cleanly (`UsbDeviceConnection` doesn't expose iso). Wire format is verified by a Rust fixture (`zerowire-simulate-android-pump`) and `tests/android_pump_loopback.sh`; real-phone validation is hardware-pending — see [`docs/hardware-verify.md`](./docs/hardware-verify.md). Design and trade-offs in [`docs/usbip-android-pump.md`](./docs/usbip-android-pump.md). Full target system: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+> **Status: v0.4 — device acquisition + UI on both ends.** v0.1 HID fast-lane, v0.2 TLS 1.3 PSK auth, v0.3 Android URB pump all still work end-to-end (loopback tests: [`tests/hid_loopback.sh`](./tests/hid_loopback.sh), [`tests/tls_psk_loopback.sh`](./tests/tls_psk_loopback.sh), [`tests/usbip_loopback.sh`](./tests/usbip_loopback.sh), [`tests/android_pump_loopback.sh`](./tests/android_pump_loopback.sh)). Synthetic kernel-loopback hardware-verify harness in [`docs/synthetic-hw-verify.md`](./docs/synthetic-hw-verify.md). v0.4 fills the v0.3 gap: nothing in the APK was actually *acquiring* the `UsbDeviceConnection` the pump consumed. The new `UsbAcquisition` layer enumerates plugged-in devices, requests USB permission with the correct `PendingIntent.FLAG_MUTABLE` semantics on API 31+, and hands an open connection to the pump. The sender app is now a Compose Material 3 UI (no more XML), the foreground service notification carries device + receiver + live bytes/sec + a Stop action, and the desktop-linux receiver gets a `zerowire-gui` window with QR pairing. Design and trade-offs in [`docs/v0.4-device-acquisition.md`](./docs/v0.4-device-acquisition.md); end-to-end test plan in [`docs/v0.4-hardware-test.md`](./docs/v0.4-hardware-test.md). Full target system: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ## What it does (when finished)
 
@@ -20,8 +20,9 @@ zerowire/
 ├── README.md             ← you are here
 ├── LICENSE               ← Apache-2.0
 ├── protocol/             ← shared protocol definitions (Rust)
-├── android-sender/       ← Android app (Kotlin + Gradle)
+├── android-sender/       ← Android app (Kotlin + Compose + Gradle)
 ├── desktop-linux/        ← Linux receiver CLI + daemon (Rust)
+├── desktop-linux-gui/    ← Linux receiver GUI (Rust, egui)  ← v0.4
 ├── desktop-windows/      ← Windows receiver (placeholder)
 ├── desktop-macos/        ← macOS DriverKit sysext (placeholder)
 ├── android-receiver/     ← Android receiver app (placeholder)
