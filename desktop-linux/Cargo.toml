@@ -18,6 +18,10 @@ path = "src/bin/zerowire_cli.rs"
 name = "zerowire-mock-sender"
 path = "src/bin/mock_sender.rs"
 
+[[bin]]
+name = "zerowire-linux-sender"
+path = "src/bin/linux_sender.rs"
+
 [dependencies]
 zerowire-protocol = { path = "../protocol" }
 clap = { version = "4", features = ["derive"] }

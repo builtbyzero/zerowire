@@ -18,12 +18,14 @@ object UsbInventory {
     fun busidFor(d: UsbDevice): String {
         // UsbDevice.deviceName looks like "/dev/bus/usb/001/002". We turn
         // that into "1-2" which matches what the receivers' clients expect.
+        // Some Android builds (notably emulators and a few OEM ROMs) return
+        // a non-/dev/bus/usb path, so fall back gracefully instead of
+        // crashing with NumberFormatException.
         val parts = d.deviceName.split('/').takeLast(2)
-        return if (parts.size == 2) {
-            "${parts[0].toInt()}-${parts[1].toInt()}"
-        } else {
-            d.deviceName
-        }
+        if (parts.size != 2) return d.deviceName
+        val bus = parts[0].toIntOrNull()
+        val dev = parts[1].toIntOrNull()
+        return if (bus != null && dev != null) "$bus-$dev" else d.deviceName
     }
 
     fun summarize(d: UsbDevice): JSONObject {

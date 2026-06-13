@@ -1,0 +1,16 @@
+{"data":{"direct_target":"127.0.0.1:47823","sender_name":"Pixel"},"event":"start","ts":"2026-05-25T05:42:31.219224Z"}
+{"data":{"target":"127.0.0.1:47823"},"event":"dial","ts":"2026-05-25T05:42:31.222758Z"}
+{"data":{},"event":"dial_ok","ts":"2026-05-25T05:42:31.223444Z"}
+{"data":{"name":"zerowire-linux-sender","sender_id":"linux-sender","supports":["hid-fastlane/1"]},"event":"hello_ack","ts":"2026-05-25T05:42:31.224369Z"}
+{"data":{"count":1,"devices":[{"busid":"5-1","is_hid":true,"product":"zerowire synthetic mouse","product_id":"c0de","vendor_id":"badd"}]},"event":"device_list","ts":"2026-05-25T05:42:31.226465Z"}
+{"data":{"busid":"5-1","mode":"hid"},"event":"attach_request","ts":"2026-05-25T05:42:31.227190Z"}
+{"data":{"busid":"5-1","import_id":1},"event":"attach_ok","ts":"2026-05-25T05:42:31.227833Z"}
+{"data":{"bind_id":1,"busid":"5-1"},"event":"bind_sent","ts":"2026-05-25T05:42:31.228272Z"}
+{"data":{"kind":"Mouse","name":"zerowire synthetic mouse","product_id":"c0de","report_descriptor_len":52,"vendor_id":"badd"},"event":"bind_ack","ts":"2026-05-25T05:42:31.228810Z"}
+{"data":{"name":"zerowire: zerowire synthetic mouse"},"event":"uinput_created","ts":"2026-05-25T05:42:31.229836Z"}
+{"data":{"bytes":[0,5,0,0],"len":4,"seq":1},"event":"report","ts":"2026-05-25T05:42:32.001340Z"}
+{"data":{"bytes":[0,5,0,0],"len":4,"seq":2},"event":"report","ts":"2026-05-25T05:42:32.033192Z"}
+{"data":{"bytes":[0,5,0,0],"len":4,"seq":3},"event":"report","ts":"2026-05-25T05:42:32.063034Z"}
+{"data":{"bytes":[0,0,5,0],"len":4,"seq":4},"event":"report","ts":"2026-05-25T05:42:32.091694Z"}
+{"data":{"bytes":[0,0,5,0],"len":4,"seq":5},"event":"report","ts":"2026-05-25T05:42:32.122432Z"}
+{"data":{"elapsed_s":1.015125228,"last_len":4,"last_seq":9,"reports_per_s":8.865901222582954,"reports_total":9},"event":"report_rate","ts":"2026-05-25T05:42:32.243431Z"}
